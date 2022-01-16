@@ -1,0 +1,23 @@
+name: Shoppingfy-backend CI
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  build: 
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: [16.x]
+          cache: 'npm'
+
+      - run:
+          npm i 
+          cd app/auth
+          node createKey.js
+          cd ~
