@@ -1,0 +1,9 @@
+node_modules
+.env
+id_rsa_jwt_priv.pem
+id_rsa_jwt_pub.pem
+
+id_rsa_refreshJwt_priv.pem
+id_rsa_refreshJwt_pub.pem
+
+access.log
