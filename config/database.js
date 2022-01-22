@@ -21,7 +21,6 @@ DB_STRING=mongodb://localhost:27017/shoppingfy
 COOKIE_SECRET=c7d67d15473641dbc96751b0a233f42f
 SMTP_SERVER=smtp-relay.sendinblue.com
 SMTP_PORT=587
-SMTP_LOGIN=kariukigeorge2030@gmail.com
-SMTP_PASSWORD=Mvm36NEwTDapK8zc*/
+*/
 
 module.exports = connection;
