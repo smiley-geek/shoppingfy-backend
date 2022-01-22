@@ -4,7 +4,10 @@ const path = require("path");
 const fs = require("fs");
 const passport = require("passport");
 const dev = process.env.NODE_ENV !== "production";
+const nodemailer = require("nodemailer");
+const dotenv = require("dotenv");
 
+dotenv.config();
 const pathToJwtKey = path.join(__dirname, "id_rsa_jwt_priv.pem");
 const pathToPrivRefreshJwtKey = path.join(
   __dirname,
@@ -72,12 +75,51 @@ COOKIE_OPTIONS = {
 };
 const verifyUser = passport.authenticate("jwt", { session: false });
 
+// ---sending emails---
+const smtpTransport = nodemailer.createTransport({
+  host: process.env.SMTP_SERVER,
+  port: process.env.SMTP_PORT,
+  auth: {
+    user: process.env.SMTP_LOGIN,
+    pass: process.env.SMTP_PASSWORD,
+  },
+});
+
+const passwordReset = async (email, token) => {
+  let message = {
+    from: "Shoppingfy <example@nodemailer.com>",
+    to: email,
+    subject: "Password reset",
+    text: `If you are getting this email, you sent a forgot password request to shoppingfy. Follow this link to reset your password: <a href=http://localhost:3000/password-reset?token=${token}>Click here </a>. If not, kindly ignore it`,
+    html: `If you are getting this email, you sent a forgot password request to shoppingfy. Follow this link to reset your password: <a href=http://localhost:3000/password-reset?token=${token}>Click here </a>. If not kindly ignore it</p>`,
+    amp: `<!doctype html>
+    <html ⚡4email>
+      <head>
+        <meta charset="utf-8">
+        <style amp4email-boilerplate>body{visibility:hidden}</style>
+        <script async src="https://cdn.ampproject.org/v0.js"></script>
+        <script async custom-element="amp-anim" src="https://cdn.ampproject.org/v0/amp-anim-0.1.js"></script>
+      </head>
+      <body>
+<h1>Hi ${email}</h1>
+<p>You sent a forgot password request to shoppingfy. </p>
+<p>Follow this link to reset your password:</p>  <a href=http://localhost:3000/password-reset?token=${token}>Click here </a>. <p>If not kindly ignore it</p>
+      </body>
+    </html>`,
+  };
+
+  const sendResult = await smtpTransport.sendMail(message);
+  return sendResult;
+};
+
 module.exports = {
   genPassword,
   validPassword,
   issueJWT,
   verifyUser,
   verifyRefreshJwt,
+
   COOKIE_OPTIONS,
   issueRefreshToken,
+  passwordReset,
 };

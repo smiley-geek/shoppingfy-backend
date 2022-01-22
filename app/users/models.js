@@ -31,8 +31,13 @@ const userSchema = mongoose.Schema(
 
       select: false,
     },
-    otp: { type: "String", default: "" },
-    otp_expires: { type: "String", default: "" },
+    otp: {
+      type: {
+        token: String,
+        expiresIn: Number,
+      },
+      select: false,
+    },
   },
   {
     timestamps: true,

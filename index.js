@@ -25,7 +25,7 @@ const accessLogStream = fs.createWriteStream(
 
 const app = express();
 app.use(logger("combined", { stream: accessLogStream }));
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(helmet());
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET));
@@ -37,6 +37,8 @@ app.use(passport.initialize());
 
 // ---Routes---
 app.use("/api/auth", authRoute);
+
+
 
 app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);

@@ -2,7 +2,9 @@ const router = require("express").Router();
 const {
   validPassword,
   genPassword,
+  passwordReset,
   issueJWT,
+
   verifyRefreshJwt,
   verifyUser,
   COOKIE_OPTIONS,
@@ -10,9 +12,11 @@ const {
 } = require("./utils");
 const { User } = require("../users/index");
 const crypto = require("crypto");
+const PasswordReset = require("./models");
+const passport = require("passport");
 
 //---email---
-router.post("/register-with-email", async (req, res, next) => {
+router.post("/register", async (req, res, next) => {
   const saltHash = genPassword(req.body.password);
   const salt = saltHash.salt;
   const hash = saltHash.hash;
@@ -24,7 +28,7 @@ router.post("/register-with-email", async (req, res, next) => {
 
     if (user) {
       if (user.password._id && user.password.hash) {
-        return res.status(403).json({
+        return res.json({
           success: false,
           message: "User with this email already exists",
         });
@@ -60,7 +64,7 @@ router.post("/register-with-email", async (req, res, next) => {
   }
 });
 
-router.post("/login-with-email", async (req, res, next) => {
+router.post("/login", async (req, res, next) => {
   try {
     let user = await User.findOne({
       email: req.body.email,
@@ -109,99 +113,91 @@ router.post("/login-with-email", async (req, res, next) => {
 });
 
 //---password reset---
-//---forgot password ---> send email with an otp then a reset route---
+//---forgot password ---> send email with a magiclink then a reset route---
 router.post("/forgot-password", async (req, res, next) => {
-  //create otp ; valid 1hr
-  const otp = crypto.randomBytes(6).toString("hex");
-  const otp_expires = (Date.now() + 1000 * 60 * 60).toString(); //valid for 1 hour
-  const user = await User.findOneAndUpdate(
-    { email: req.body.email, strategy: "email" },
-    {
-      otp,
-      otp_expires,
-    },
-    { new: true }
-  );
-
-  //send email
-  return res.json(otp);
-});
-router.post("/verify-otp", async (req, res, next) => {
-  //verify otp
-  const { otp, email } = req.body;
   try {
-    const user = await User.findOne({
+    const email = req.body.email;
+    let user = await User.findOne({ email });
+    if (!user)
+      return res.json({ success: false, message: "User does not exist" });
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresIn = Date.now() + 1000 * 60 * 30;
+    user = await User.findOneAndUpdate(
+      { email },
+      {
+        otp: { token, expiresIn },
+      }
+    ).select("+otp");
+
+    //send email
+    const output = await passwordReset(email, token);
+
+    const passReset = new PasswordReset({
       email,
-      strategy: "email",
+      response: JSON.stringify(output),
     });
-    if (parseInt(user.otp_expires) <= Date.now()) {
-      return res
-        .status(403)
-        .json({ success: false, message: "The otp has already expired" });
-    }
-
-    if (!(otp == user.otp)) {
-      return res
-        .status(403)
-        .json({ success: false, message: "The otp is not legit" });
-    }
-
-    //redirect to password reset
-    return res.status(200).json({ success: true, message: "otp valid" });
+    await passReset.save();
+    res.json({ success: true });
   } catch (error) {
-    res.status(500).json(error);
+    console.log(error);
   }
 });
+
 //---password-reset---
 router.post("/password-reset", async (req, res) => {
+  //verify token
+  const password = req.body.password;
+  const token = req.body.token;
+  const email = req.body.email;
   //get email and new password and create
   const saltHash = genPassword(password);
   const salt = saltHash.salt;
   const hash = saltHash.hash;
   //update current email record
   try {
-    const user = await User.findOneAndUpdate(
-      { email, strategy: "email" },
-      {
-        salt,
-        hash,
-        otp: "",
-        otp_expires: "",
-      },
-      { new: true }
-    );
+    let user = await User.findOne({ email }).select("+otp");
     if (!user)
       return res
-        .status(404)
-        .json({ success: false, message: "user does not exist" });
-    return res.status(200).json({ success: true, user });
+        .status(403)
+        .json({ success: false, message: "This user doesn't exist" });
+
+    if (user.otp.token !== token) {
+      return res.status(403).json({
+        success: false,
+        message: "Your token is incorrect",
+      });
+    }
+    if (user.otp.expiresIn < Date.now()) {
+      return res.status(403).json({
+        success: false,
+        message: "Sorry but token has expired try again",
+      });
+    }
+
+    user = await User.findOneAndUpdate(
+      { email: req.body.email },
+      {
+        password: { salt, hash },
+        otp: {
+          token: "",
+          expiresIn: 0,
+        },
+      },
+      { new: true }
+    )
+      .select("+otp")
+      .select("+password");
+
+    return res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json(error);
   }
-
-  //success
 });
-
-//---test route---
-
-const passport = require("passport");
-router.get(
-  "/users",
-  passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
-    try {
-      const users = await User.find();
-      return res.json(users);
-    } catch (error) {
-      return res.status(500).json(error);
-    }
-  }
-);
 
 //---google---
 
 router.post(
-  "/google/",
+  "/google",
   passport.authenticate("google-token", {
     session: false,
   }),
@@ -209,7 +205,7 @@ router.post(
     if (!req.user) {
       return res
         .status(401)
-        .json({ success: false, message: "Unauthenticated" });
+        .json({ success: false, message: "An error occured" });
     }
     try {
       let user = await User.findOne({ email: req.user.email });
